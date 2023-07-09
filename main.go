@@ -21,7 +21,7 @@ func main() {
 	lambda.Start(handleVerificationRequest)
 }
 
-func handleVerificationRequest(ctx context.Context, input jsales.SalesVerificationRequestInput) error {
+func handleVerificationRequest(ctx context.Context, input jsales.InAppPurchaseRequestInput) error {
 
 	switch input.Platform {
 	case jshared.MOBILE_PLATFORM_NAME_IOS:
@@ -33,7 +33,7 @@ func handleVerificationRequest(ctx context.Context, input jsales.SalesVerificati
 	}
 }
 
-func handleAppStoreVerification(ctx context.Context, input jsales.SalesVerificationRequestInput) error {
+func handleAppStoreVerification(ctx context.Context, input jsales.InAppPurchaseRequestInput) error {
 
 	client := appstore.New()
 	req := appstore.IAPRequest{
@@ -53,7 +53,7 @@ func handleAppStoreVerification(ctx context.Context, input jsales.SalesVerificat
 		return fmt.Errorf("unexpected status received from the app store: %d", resp.Status)
 	}
 
-	if resp.Receipt.BundleID != input.AppBundleID {
+	if resp.Receipt.BundleID != input.ApplicationID {
 		return fmt.Errorf("unexpected bundle ID received from the app store: %s", resp.Receipt.BundleID)
 	}
 
@@ -73,7 +73,7 @@ func handleAppStoreVerification(ctx context.Context, input jsales.SalesVerificat
 	return fmt.Errorf("error: unable to find transaction matching product ID: %s", input.ProductID)
 }
 
-func handlePlayStoreVerification(ctx context.Context, input jsales.SalesVerificationRequestInput) error {
+func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchaseRequestInput) error {
 
 	var envVar string
 	switch input.OrganizationID {
@@ -93,7 +93,7 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.SalesVerifica
 		return fmt.Errorf("could not initialize playstore client: %s", clientErr.Error())
 	}
 
-	purchase, verifyErr := playstoreClient.VerifyProduct(ctx, input.AppBundleID, input.ProductID, input.VerificationString)
+	purchase, verifyErr := playstoreClient.VerifyProduct(ctx, input.ApplicationID, input.ProductID, input.VerificationString)
 	if verifyErr != nil {
 		return fmt.Errorf("could not verify product: %s", verifyErr.Error())
 	}
