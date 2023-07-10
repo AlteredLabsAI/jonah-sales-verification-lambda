@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	jshared "github.com/AlteredLabsAI/jonah-shared"
@@ -21,7 +22,18 @@ func main() {
 	lambda.Start(handleVerificationRequest)
 }
 
-func handleVerificationRequest(ctx context.Context, input jsales.InAppPurchaseRequestInput) error {
+func handleVerificationRequest(ctx context.Context, invocationInput jshared.LambdaInvocationInput) error {
+
+	decoded, decodedErr := jshared.Base64Decode(invocationInput.TaskData)
+	if decodedErr != nil {
+		return fmt.Errorf("could not decode TaskData: %s", decodedErr.Error())
+	}
+
+	var input jsales.InAppPurchaseRequestInput
+	decodeErr := json.Unmarshal([]byte(decoded), &input)
+	if decodeErr != nil {
+		return fmt.Errorf("could not unmarshal json: %s", decodeErr.Error())
+	}
 
 	switch input.Platform {
 	case jshared.MOBILE_PLATFORM_NAME_IOS:
