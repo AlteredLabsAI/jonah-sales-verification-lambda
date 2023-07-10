@@ -78,17 +78,17 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 	var envVar string
 	switch input.OrganizationID {
 	case jshared.ORGANIZATION_ID_ALTERSNAP:
-		envVar = "GOOGLE_ALTERSNAP_PUBLIC_KEY_JSON"
+		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON"
 	default:
 		return fmt.Errorf("invalid organization id - there is no public key available for %s", input.OrganizationID)
 	}
 
-	publicKeyJSONStr := jshared.GetLambdaEnv(envVar)
-	if publicKeyJSONStr == "" {
+	credentialsJsonStr := jshared.GetLambdaEnv(envVar)
+	if credentialsJsonStr == "" {
 		return fmt.Errorf("no %s was found", envVar)
 	}
 
-	playstoreClient, clientErr := playstore.New([]byte(publicKeyJSONStr))
+	playstoreClient, clientErr := playstore.New([]byte(credentialsJsonStr))
 	if clientErr != nil {
 		return fmt.Errorf("could not initialize playstore client: %s", clientErr.Error())
 	}
