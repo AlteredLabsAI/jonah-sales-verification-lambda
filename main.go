@@ -16,7 +16,6 @@ const APPSTORE_RESPONSE_STATUS_VALID int = 0
 
 const PLAYSTORE_PURCHASE_STATE_COMPLETED int64 = 0
 const PLAYSTORE_CONSUMPTION_STATE_UNCONSUMED int64 = 0
-const PLAYSTORE_ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED int64 = 1
 
 func main() {
 	lambda.Start(handleVerificationRequest)
@@ -118,15 +117,10 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 		return fmt.Errorf("invalid consumptionState: %d", purchase.ConsumptionState)
 	}
 
-	if purchase.PurchaseToken != input.VerificationString {
-		return fmt.Errorf("invalid purchaseToken received. got %s, expected %s", purchase.PurchaseToken, input.VerificationString)
+	consumeErr := playstoreClient.ConsumeProduct(ctx, input.ApplicationID, input.ProductID, input.VerificationString)
+	if consumeErr != nil {
+		return fmt.Errorf("could not conume product: %s", consumeErr.Error())
 	}
-
-	if purchase.AcknowledgementState != PLAYSTORE_ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED {
-		return fmt.Errorf("invalid acknowledgementState: %d", purchase.AcknowledgementState)
-	}
-
-	//Possible TODO: Send developer payload upon purchase initiation and verify that it matches. (Maybe use userid?)
 
 	return nil
 }
