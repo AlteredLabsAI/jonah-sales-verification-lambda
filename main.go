@@ -21,17 +21,19 @@ func main() {
 	lambda.Start(handleVerificationRequest)
 }
 
-func handleVerificationRequest(ctx context.Context, invocationInput jshared.LambdaInvocationInput) error {
+func handleVerificationRequest(ctx context.Context, invocationInput jshared.LambdaInvocationInput) (jsales.InAppPurchaseRequestOutput, error) {
+
+	output := jsales.InAppPurchaseRequestOutput{}
 
 	decoded, decodedErr := jshared.Base64Decode(invocationInput.TaskData)
 	if decodedErr != nil {
-		return fmt.Errorf("could not decode TaskData: %s", decodedErr.Error())
+		return output, fmt.Errorf("could not decode TaskData: %s", decodedErr.Error())
 	}
 
 	var input jsales.InAppPurchaseRequestInput
 	decodeErr := json.Unmarshal([]byte(decoded), &input)
 	if decodeErr != nil {
-		return fmt.Errorf("could not unmarshal json: %s", decodeErr.Error())
+		return output, fmt.Errorf("could not unmarshal json: %s", decodeErr.Error())
 	}
 
 	switch input.Platform {
@@ -40,11 +42,13 @@ func handleVerificationRequest(ctx context.Context, invocationInput jshared.Lamb
 	case jshared.MOBILE_PLATFORM_NAME_ANDROID:
 		return handlePlayStoreVerification(ctx, input)
 	default:
-		return fmt.Errorf("invalid platform passed into handleVerificationRequest: %s", input.Platform)
+		return output, fmt.Errorf("invalid platform passed into handleVerificationRequest: %s", input.Platform)
 	}
 }
 
-func handleAppStoreVerification(ctx context.Context, input jsales.InAppPurchaseRequestInput) error {
+func handleAppStoreVerification(ctx context.Context, input jsales.InAppPurchaseRequestInput) (jsales.InAppPurchaseRequestOutput, error) {
+
+	output := jsales.InAppPurchaseRequestOutput{}
 
 	client := appstore.New()
 	req := appstore.IAPRequest{
@@ -53,7 +57,7 @@ func handleAppStoreVerification(ctx context.Context, input jsales.InAppPurchaseR
 	resp := &appstore.IAPResponse{}
 	verifyErr := client.Verify(ctx, req, resp)
 	if verifyErr != nil {
-		return fmt.Errorf("could not verify purchase: %s", verifyErr.Error())
+		return output, fmt.Errorf("could not verify purchase: %s", verifyErr.Error())
 	}
 
 	if resp.Environment == appstore.Sandbox {
@@ -61,11 +65,11 @@ func handleAppStoreVerification(ctx context.Context, input jsales.InAppPurchaseR
 	}
 
 	if resp.Status != APPSTORE_RESPONSE_STATUS_VALID {
-		return fmt.Errorf("unexpected status received from the app store: %d", resp.Status)
+		return output, fmt.Errorf("unexpected status received from the app store: %d", resp.Status)
 	}
 
 	if resp.Receipt.BundleID != input.ApplicationID {
-		return fmt.Errorf("unexpected bundle ID received from the app store: %s", resp.Receipt.BundleID)
+		return output, fmt.Errorf("unexpected bundle ID received from the app store: %s", resp.Receipt.BundleID)
 	}
 
 	for _, item := range resp.Receipt.InApp {
@@ -74,53 +78,69 @@ func handleAppStoreVerification(ctx context.Context, input jsales.InAppPurchaseR
 		}
 
 		if jshared.CastStringToI(item.Quantity) == 0 {
-			return fmt.Errorf("unexpected item quantity received: %s", item.Quantity)
+			return output, fmt.Errorf("unexpected item quantity received: %s", item.Quantity)
 		}
 
+		output.OrganizationID = input.OrganizationID
+		output.UserID = input.UserID
+		output.ApplicationID = input.ApplicationID
+		output.Platform = input.Platform
+		output.ProductID = input.ProductID
+		output.TransactionID = item.TransactionID
+
 		//The purchase was found and there's a valid quantity.
-		return nil
+		return output, nil
 	}
 
-	return fmt.Errorf("error: unable to find transaction matching product ID: %s", input.ProductID)
+	return output, fmt.Errorf("error: unable to find transaction matching product ID: %s", input.ProductID)
 }
 
-func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchaseRequestInput) error {
+func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchaseRequestInput) (jsales.InAppPurchaseRequestOutput, error) {
+
+	output := jsales.InAppPurchaseRequestOutput{}
 
 	var envVar string
 	switch input.OrganizationID {
 	case jshared.ORGANIZATION_ID_ALTERSNAP:
 		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON"
 	default:
-		return fmt.Errorf("invalid organization id - there is no public key available for %s", input.OrganizationID)
+		return output, fmt.Errorf("invalid organization id - there is no public key available for %s", input.OrganizationID)
 	}
 
 	credentialsJsonStr := jshared.GetLambdaEnv(envVar)
 	if credentialsJsonStr == "" {
-		return fmt.Errorf("no %s was found", envVar)
+		return output, fmt.Errorf("no %s was found", envVar)
 	}
 
 	playstoreClient, clientErr := playstore.New([]byte(credentialsJsonStr))
 	if clientErr != nil {
-		return fmt.Errorf("could not initialize playstore client: %s", clientErr.Error())
+		return output, fmt.Errorf("could not initialize playstore client: %s", clientErr.Error())
 	}
 
 	purchase, verifyErr := playstoreClient.VerifyProduct(ctx, input.ApplicationID, input.ProductID, input.VerificationString)
 	if verifyErr != nil {
-		return fmt.Errorf("could not verify product: %s", verifyErr.Error())
+		return output, fmt.Errorf("could not verify product: %s", verifyErr.Error())
 	}
 
 	if purchase.PurchaseState != PLAYSTORE_PURCHASE_STATE_COMPLETED {
-		return fmt.Errorf("invalid purchaseState: %d", purchase.PurchaseState)
+		return output, fmt.Errorf("invalid purchaseState: %d", purchase.PurchaseState)
 	}
 
 	if purchase.ConsumptionState != PLAYSTORE_CONSUMPTION_STATE_UNCONSUMED {
-		return fmt.Errorf("invalid consumptionState: %d", purchase.ConsumptionState)
+		return output, fmt.Errorf("invalid consumptionState: %d", purchase.ConsumptionState)
 	}
 
 	consumeErr := playstoreClient.ConsumeProduct(ctx, input.ApplicationID, input.ProductID, input.VerificationString)
 	if consumeErr != nil {
-		return fmt.Errorf("could not conume product: %s", consumeErr.Error())
+		return output, fmt.Errorf("could not conume product: %s", consumeErr.Error())
 	}
 
-	return nil
+	output.OrganizationID = input.OrganizationID
+	output.UserID = input.UserID
+	output.ApplicationID = input.ApplicationID
+	output.Platform = input.Platform
+	output.ProductID = input.ProductID
+	output.TransactionID = purchase.PurchaseToken
+
+	return output, nil
 }
