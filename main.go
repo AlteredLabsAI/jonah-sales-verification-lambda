@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/golang-jwt/jwt/v4"
+
 	jshared "github.com/AlteredLabsAI/jonah-shared"
 	jsales "github.com/AlteredLabsAI/jonah-shared/sales"
 	"github.com/awa/go-iap/appstore"
@@ -21,28 +23,36 @@ func main() {
 	lambda.Start(handleVerificationRequest)
 }
 
-func handleVerificationRequest(ctx context.Context, invocationInput jshared.LambdaInvocationInput) (jsales.InAppPurchaseRequestOutput, error) {
+func handleVerificationRequest(ctx context.Context, invocationInput jshared.LambdaInvocationInput) (interface{}, error) {
 
 	output := jsales.InAppPurchaseRequestOutput{}
 
-	decoded, decodedErr := jshared.Base64Decode(invocationInput.TaskData)
+	jsonStr, decodedErr := jshared.Base64Decode(invocationInput.TaskData)
 	if decodedErr != nil {
 		return output, fmt.Errorf("could not decode TaskData: %s", decodedErr.Error())
 	}
 
-	var input jsales.InAppPurchaseRequestInput
-	decodeErr := json.Unmarshal([]byte(decoded), &input)
-	if decodeErr != nil {
-		return output, fmt.Errorf("could not unmarshal json: %s", decodeErr.Error())
-	}
+	if invocationInput.TaskName == jsales.SALES_TASK_NAME_VERIFY_IN_APP_PURCHASE {
+		var input jsales.InAppPurchaseRequestInput
+		decodeErr := json.Unmarshal([]byte(jsonStr), &input)
+		if decodeErr != nil {
+			return output, fmt.Errorf("could not unmarshal json: %s", decodeErr.Error())
+		}
 
-	switch input.Platform {
-	case jshared.MOBILE_PLATFORM_NAME_IOS:
-		return handleAppStoreVerification(ctx, input)
-	case jshared.MOBILE_PLATFORM_NAME_ANDROID:
-		return handlePlayStoreVerification(ctx, input)
-	default:
-		return output, fmt.Errorf("invalid platform passed into handleVerificationRequest: %s", input.Platform)
+		switch input.Platform {
+		case jshared.MOBILE_PLATFORM_NAME_IOS:
+			return handleAppStoreVerification(ctx, input)
+		case jshared.MOBILE_PLATFORM_NAME_ANDROID:
+			return handlePlayStoreVerification(ctx, input)
+		default:
+			return output, fmt.Errorf("invalid platform passed into handleVerificationRequest: %s", input.Platform)
+		}
+	} else if invocationInput.TaskName == jsales.SALES_TASK_NAME_VERIFY_APPLE_NOTIFICATION_V2 {
+		return handleAppleAppStoreNotificationV2Verification(ctx, invocationInput.TaskData)
+	} else if invocationInput.TaskName == jsales.SALES_TASK_NAME_VERIFY_GOOGLE_PUBSUB_NOTIFICATION {
+		return handleGooglePlaystoreNotificationVerification(ctx, invocationInput.TaskData)
+	} else {
+		return output, fmt.Errorf("invalid verification task name specified: %s", invocationInput.TaskName)
 	}
 }
 
@@ -141,6 +151,37 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 	output.Platform = input.Platform
 	output.ProductID = input.ProductID
 	output.TransactionID = purchase.PurchaseToken
+
+	return output, nil
+}
+
+func handleAppleAppStoreNotificationV2Verification(ctx context.Context, payload string) (jsales.NotificationVerificationRequestOutput, error) {
+	output := jsales.NotificationVerificationRequestOutput{}
+
+	token := jwt.Token{}
+	client := appstore.New()
+	verifyErr := client.ParseNotificationV2(payload, &token)
+	if verifyErr != nil {
+		return output, fmt.Errorf("could not verify v2 notification: %s", verifyErr.Error())
+	}
+
+	claims, _ := token.Claims.(jwt.MapClaims)
+	for key, val := range claims {
+		fmt.Printf("key: %v\n", key)
+		fmt.Printf("val: %v\n", val)
+		if key == "data" {
+			for k2, v2 := range val.(jwt.MapClaims) {
+				fmt.Printf("key2: %v\n", k2)
+				fmt.Printf("val2: %v\n", v2)
+			}
+		}
+	}
+
+	return output, nil
+}
+
+func handleGooglePlaystoreNotificationVerification(ctx context.Context, payload string) (jsales.NotificationVerificationRequestOutput, error) {
+	output := jsales.NotificationVerificationRequestOutput{}
 
 	return output, nil
 }
