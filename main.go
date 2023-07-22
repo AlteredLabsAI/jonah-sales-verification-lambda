@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/golang-jwt/jwt/v4"
-
 	jshared "github.com/AlteredLabsAI/jonah-shared"
 	jsales "github.com/AlteredLabsAI/jonah-shared/sales"
 	"github.com/awa/go-iap/appstore"
@@ -47,10 +45,6 @@ func handleVerificationRequest(ctx context.Context, invocationInput jshared.Lamb
 		default:
 			return output, fmt.Errorf("invalid platform passed into handleVerificationRequest: %s", input.Platform)
 		}
-	} else if invocationInput.TaskName == jsales.SALES_TASK_NAME_VERIFY_APPLE_NOTIFICATION_V2 {
-		return handleAppleAppStoreNotificationV2Verification(ctx, invocationInput.TaskData)
-	} else if invocationInput.TaskName == jsales.SALES_TASK_NAME_VERIFY_GOOGLE_PUBSUB_NOTIFICATION {
-		return handleGooglePlaystoreNotificationVerification(ctx, invocationInput.TaskData)
 	} else {
 		return output, fmt.Errorf("invalid verification task name specified: %s", invocationInput.TaskName)
 	}
@@ -151,37 +145,6 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 	output.Platform = input.Platform
 	output.ProductID = input.ProductID
 	output.TransactionID = purchase.PurchaseToken
-
-	return output, nil
-}
-
-func handleAppleAppStoreNotificationV2Verification(ctx context.Context, payload string) (jsales.NotificationVerificationRequestOutput, error) {
-	output := jsales.NotificationVerificationRequestOutput{}
-
-	token := jwt.Token{}
-	client := appstore.New()
-	verifyErr := client.ParseNotificationV2(payload, &token)
-	if verifyErr != nil {
-		return output, fmt.Errorf("could not verify v2 notification: %s", verifyErr.Error())
-	}
-
-	claims, _ := token.Claims.(jwt.MapClaims)
-	for key, val := range claims {
-		fmt.Printf("key: %v\n", key)
-		fmt.Printf("val: %v\n", val)
-		if key == "data" {
-			for k2, v2 := range val.(jwt.MapClaims) {
-				fmt.Printf("key2: %v\n", k2)
-				fmt.Printf("val2: %v\n", v2)
-			}
-		}
-	}
-
-	return output, nil
-}
-
-func handleGooglePlaystoreNotificationVerification(ctx context.Context, payload string) (jsales.NotificationVerificationRequestOutput, error) {
-	output := jsales.NotificationVerificationRequestOutput{}
 
 	return output, nil
 }
