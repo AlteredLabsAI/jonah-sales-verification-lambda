@@ -45,6 +45,13 @@ func handleVerificationRequest(ctx context.Context, invocationInput jshared.Lamb
 		default:
 			return output, fmt.Errorf("invalid platform passed into handleVerificationRequest: %s", input.Platform)
 		}
+	} else if invocationInput.TaskName == jsales.SALES_TASK_NAME_PLAYSTORE_VOIDED_PURCHASES_CHECK {
+		var input jsales.PlayStoreVoidedPurchaseCallRequestInput
+		decodeErr := json.Unmarshal([]byte(jsonStr), &input)
+		if decodeErr != nil {
+			return output, fmt.Errorf("could not unmarshal json: %s", decodeErr.Error())
+		}
+		return handlePlayStoreVoidedPurchaseCall(ctx, input)
 	} else {
 		return output, fmt.Errorf("invalid verification task name specified: %s", invocationInput.TaskName)
 	}
@@ -108,7 +115,7 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 	case jshared.ORGANIZATION_ID_ALTERSNAP:
 		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON"
 	default:
-		return output, fmt.Errorf("invalid organization id - there is no public key available for %s", input.OrganizationID)
+		return output, fmt.Errorf("invalid organization id - there is no key available for %s", input.OrganizationID)
 	}
 
 	credentialsJsonStr := jshared.GetLambdaEnv(envVar)
@@ -145,6 +152,52 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 	output.Platform = input.Platform
 	output.ProductID = input.ProductID
 	output.TransactionID = input.VerificationString
+
+	return output, nil
+
+}
+
+func handlePlayStoreVoidedPurchaseCall(ctx context.Context, input jsales.PlayStoreVoidedPurchaseCallRequestInput) (jsales.PlayStoreVoidedPurchaseCallRequestOutput, error) {
+
+	output := jsales.PlayStoreVoidedPurchaseCallRequestOutput{}
+
+	var envVar string
+	switch input.OrganizationID {
+	case jshared.ORGANIZATION_ID_ALTERSNAP:
+		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON"
+	default:
+		return output, fmt.Errorf("invalid organization id - there is no key available for %s", input.OrganizationID)
+	}
+
+	credentialsJsonStr := jshared.GetLambdaEnv(envVar)
+	if credentialsJsonStr == "" {
+		return output, fmt.Errorf("no %s was found", envVar)
+	}
+
+	playstoreClient, clientErr := playstore.New([]byte(credentialsJsonStr))
+	if clientErr != nil {
+		return output, fmt.Errorf("could not initialize playstore client: %s", clientErr.Error())
+	}
+
+	results, resultsErr := playstoreClient.VoidedPurchases(ctx, input.ApplicationID, input.StartTime, input.EndTime, 1000, input.Token, 0, 0)
+	if resultsErr != nil {
+		return output, fmt.Errorf("could not get voided purchases: %s", resultsErr.Error())
+	}
+
+	output.TokenPagination.NextPageToken = results.TokenPagination.NextPageToken
+	output.VoidedPurchases = make([]jsales.PlayStoreVoidedPurchaseItem, len(results.VoidedPurchases))
+
+	for i, voidedPurchase := range results.VoidedPurchases {
+		output.VoidedPurchases[i] = jsales.PlayStoreVoidedPurchaseItem{
+			Kind:               voidedPurchase.Kind,
+			PurchaseToken:      voidedPurchase.PurchaseToken,
+			PurchaseTimeMillis: voidedPurchase.PurchaseTimeMillis,
+			VoidedTimeMillis:   voidedPurchase.VoidedTimeMillis,
+			OrderID:            voidedPurchase.OrderId,
+			VoidedSource:       voidedPurchase.VoidedSource,
+			VoidedReason:       voidedPurchase.VoidedReason,
+		}
+	}
 
 	return output, nil
 }
