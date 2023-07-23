@@ -144,7 +144,7 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 	output.ApplicationID = input.ApplicationID
 	output.Platform = input.Platform
 	output.ProductID = input.ProductID
-	output.TransactionID = purchase.PurchaseToken
+	output.TransactionID = input.VerificationString
 
 	return output, nil
 }
