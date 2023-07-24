@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	jshared "github.com/AlteredLabsAI/jonah-shared"
 	jsales "github.com/AlteredLabsAI/jonah-shared/sales"
@@ -179,12 +180,23 @@ func handlePlayStoreVoidedPurchaseCall(ctx context.Context, input jsales.PlaySto
 		return output, fmt.Errorf("could not initialize playstore client: %s", clientErr.Error())
 	}
 
+	if input.StartTime == 0 {
+		input.StartTime = time.Now().AddDate(0, 0, -29).UnixMilli()
+	}
+
+	if input.EndTime == 0 {
+		input.EndTime = time.Now().UnixMilli()
+	}
+
 	results, resultsErr := playstoreClient.VoidedPurchases(ctx, input.ApplicationID, input.StartTime, input.EndTime, 1000, input.Token, 0, 0)
 	if resultsErr != nil {
 		return output, fmt.Errorf("could not get voided purchases: %s", resultsErr.Error())
 	}
 
-	output.TokenPagination.NextPageToken = results.TokenPagination.NextPageToken
+	if results != nil && results.TokenPagination != nil {
+		output.TokenPagination.NextPageToken = results.TokenPagination.NextPageToken
+	}
+
 	output.VoidedPurchases = make([]jsales.PlayStoreVoidedPurchaseItem, len(results.VoidedPurchases))
 
 	for i, voidedPurchase := range results.VoidedPurchases {
