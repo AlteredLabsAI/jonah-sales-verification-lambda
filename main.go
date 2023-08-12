@@ -114,12 +114,16 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 	var envVar string
 	switch input.OrganizationID {
 	case jshared.ORGANIZATION_ID_ALTERSNAP:
-		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON"
+		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON_SECRET_ARN"
 	default:
 		return output, fmt.Errorf("invalid organization id - there is no key available for %s", input.OrganizationID)
 	}
 
-	credentialsJsonStr := jshared.GetLambdaEnv(envVar)
+	credentialsJsonStr, credsJSONErr := jshared.GetSecretFromLambdaSecretsStore(envVar)
+	if credsJSONErr != nil {
+		return output, fmt.Errorf("could not get the credentials from the lambda secrets store: %s", credsJSONErr.Error())
+	}
+
 	if credentialsJsonStr == "" {
 		return output, fmt.Errorf("no %s was found", envVar)
 	}
@@ -165,12 +169,16 @@ func handlePlayStoreVoidedPurchaseCall(ctx context.Context, input jsales.PlaySto
 	var envVar string
 	switch input.OrganizationID {
 	case jshared.ORGANIZATION_ID_ALTERSNAP:
-		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON"
+		envVar = "GOOGLE_ALTERSNAP_CREDENTIALS_JSON_SECRET_ARN"
 	default:
 		return output, fmt.Errorf("invalid organization id - there is no key available for %s", input.OrganizationID)
 	}
 
-	credentialsJsonStr := jshared.GetLambdaEnv(envVar)
+	credentialsJsonStr, credsJSONErr := jshared.GetSecretFromLambdaSecretsStore(envVar)
+	if credsJSONErr != nil {
+		return output, fmt.Errorf("could not get the credentials from the lambda secrets store: %s", credsJSONErr.Error())
+	}
+
 	if credentialsJsonStr == "" {
 		return output, fmt.Errorf("no %s was found", envVar)
 	}
