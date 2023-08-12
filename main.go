@@ -119,7 +119,12 @@ func handlePlayStoreVerification(ctx context.Context, input jsales.InAppPurchase
 		return output, fmt.Errorf("invalid organization id - there is no key available for %s", input.OrganizationID)
 	}
 
-	credentialsJsonStr, credsJSONErr := jshared.GetSecretFromLambdaSecretsStore(envVar)
+	credsJSONArn := jshared.GetLambdaEnv(envVar)
+	if credsJSONArn == "" {
+		return output, fmt.Errorf("no credentials arn found for play store")
+	}
+
+	credentialsJsonStr, credsJSONErr := jshared.GetSecretFromLambdaSecretsStore(credsJSONArn)
 	if credsJSONErr != nil {
 		return output, fmt.Errorf("could not get the credentials from the lambda secrets store: %s", credsJSONErr.Error())
 	}
@@ -174,7 +179,12 @@ func handlePlayStoreVoidedPurchaseCall(ctx context.Context, input jsales.PlaySto
 		return output, fmt.Errorf("invalid organization id - there is no key available for %s", input.OrganizationID)
 	}
 
-	credentialsJsonStr, credsJSONErr := jshared.GetSecretFromLambdaSecretsStore(envVar)
+	credsJSONArn := jshared.GetLambdaEnv(envVar)
+	if credsJSONArn == "" {
+		return output, fmt.Errorf("no credentials arn found for play store")
+	}
+
+	credentialsJsonStr, credsJSONErr := jshared.GetSecretFromLambdaSecretsStore(credsJSONArn)
 	if credsJSONErr != nil {
 		return output, fmt.Errorf("could not get the credentials from the lambda secrets store: %s", credsJSONErr.Error())
 	}
